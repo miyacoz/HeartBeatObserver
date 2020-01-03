@@ -10,14 +10,14 @@ import dotenv
 import requests
 
 def getWebhookUrl():
-  webhookUrl = os.getenv("WEBHOOK_URL")
-  if webhookUrl is None:
+  webhookUrl = os.getenv("WEBHOOK_URL", default = "")
+  if webhookUrl == "":
     print("WEBHOOK_URL is not set")
     sys.exit(1)
   return webhookUrl
 
 def getObservationTargets():
-  observationTargets = os.getenv("OBSERVATION_TARGETS").split(",")
+  observationTargets = [target for target in os.getenv("OBSERVATION_TARGETS", default = "").split(",") if len(target) > 0]
   if len(observationTargets) == 0:
     print("OBSERVATION_TARGETS are not set")
     sys.exit(1)
@@ -25,15 +25,32 @@ def getObservationTargets():
 
 def checkAvailabilitiesOfTargets():
   targets = getObservationTargets()
-  return [(target, requests.get(target).status_code) for target in targets]
+  result = []
+  for target in targets:
+    status = 0
+    try:
+      status = requests.get(target).status_code
+    except requests.exceptions.ConnectionError:
+      status = "Failed to connect"
+    except requests.exceptions.Timeout:
+      status = "Timeout"
+    except requests.exception.TooManyRedirects:
+      status = "Too many redirects occurred"
+    result.append((target, status))
+  return result
 
 def getPingedUsers():
-  pingedUserIds = os.getenv("USER_IDS_FOR_PINGING").split(",")
-  userIdentifiers = ["<@" + userId + ">" for userId in pingedUserIds]
-  return (" ".join(userIdentifiers) if len(pingedUserIds) > 0 else "<@here>") + " "
+  userIds = [userId for userId in os.getenv("USER_IDS_FOR_PINGING", default = "").split(",") if len(userId) > 0]
+  if len(userIds) == 0:
+    return ""
+  userIdentifiers = ["<@" + userId + ">" for userId in userIds]
+  return " ".join(userIdentifiers) + " "
 
 def isOkayStatus(statusCode):
-  return statusCode >= 200 and statusCode < 400
+  try:
+    return statusCode >= 200 and statusCode < 400
+  except:
+    return False
 
 def getMessage():
   # make this more testable
