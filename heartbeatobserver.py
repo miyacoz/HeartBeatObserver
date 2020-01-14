@@ -19,9 +19,6 @@ def getWebhookUrl():
 
 def getObservationTargets():
   observationTargets = [target for target in os.getenv("OBSERVATION_TARGETS", default = "").split(",") if len(target) > 0]
-  if len(observationTargets) == 0:
-    print("OBSERVATION_TARGETS are not set")
-    sys.exit(1)
   return observationTargets
 
 def checkAvailabilitiesOfTargets():
@@ -88,7 +85,7 @@ def getMessage():
     "Current loads: " + ", ".join(["`" + la + "`" for la in loadAverages]),
     "Virtual memory usage: " + getMemoryUsage(psutil.virtual_memory()),
     "Swap memory usage: " + getMemoryUsage(psutil.swap_memory()),
-    "Availability checks:",
+    ("Availability checks:" if len(result) > 0 else ""),
     "\n".join([record[0] + " " + (str(record[1]) if isOkayStatus(record[1]) else "__" + str(record[1]) + "__") for record in result]),
   ])
 

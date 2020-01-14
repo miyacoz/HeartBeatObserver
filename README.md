@@ -11,7 +11,7 @@ Also, it would inform you about the load averages of the server where you instal
 |Name|Optional?|Description|Example|
 |---|---|---|---|
 |`WEBHOOK_URL`||The Discord's webhook url HeartBeatObserver would post messages to.|`https://discordapp.com/api/webhooks/{webhook.id}/{webhook.token}`<br />For details, see [Discord's documentation](https://discordapp.com/developers/docs/resources/webhook).|
-|`OBSERVATION_TARGETS`||Comma-separated urls of websites that you want to observe. Each url has to include its scheme (such as `https:`).|`https://www.zeppel.biz/`<br />`https://www.zeppel.net/,https://www.zeppel.biz/this/path/does/not/exist/really?maybe=true`|
+|`OBSERVATION_TARGETS`|*Y*|Comma-separated urls of websites that you want to observe. Each url has to include its scheme (such as `https:`).|`https://www.zeppel.biz/`<br />`https://www.zeppel.net/,https://www.zeppel.biz/this/path/does/not/exist/really?maybe=true`|
 |`USER_IDS_FOR_PINGING`|*Y*|Comma-separated numeric ids of users you want to ping. The user id is different from username like `miyaco` and `miyaco#8492`.<br /> If it is blank, HeartBeatObserver would not ping anyone even if it needs to do so.|`12345`<br />`12345,23456`|
 
 ## How to use
