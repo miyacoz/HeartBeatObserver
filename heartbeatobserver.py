@@ -80,7 +80,7 @@ def getPingedUsers():
   userIdentifiers = ['<@' + userId + '>' for userId in userIds]
   return ' '.join(userIdentifiers) + ' '
 
-def isOkayStatus(statusCode: str) -> str:
+def isOkayStatus(statusCode: str) -> bool:
   try:
     s = parseInt(statusCode)
     return s >= 200 and s < 400
