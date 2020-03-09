@@ -16,8 +16,7 @@ import requests
 def memoize(f: Callable) -> Callable:
   table = {}
   def func(*args):
-    if not args in table:
-      table[args] = f(*args)
+    if not args in table: table[args] = f(*args)
     return table[args]
   return func
 
@@ -29,9 +28,7 @@ def parseInt(value: str) -> int:
 
 def getWebhookUrl():
   webhookUrl = os.getenv('WEBHOOK_URL', default = '')
-  if webhookUrl == '':
-    print('WEBHOOK_URL is not set')
-    sys.exit(1)
+  if webhookUrl == '': raise Exception('WEBHOOK_URL is not set')
   return webhookUrl
 
 def getObservationTargets(): return [target for target in os.getenv('OBSERVATION_TARGETS', default = '').split(',') if len(target) > 0]
@@ -120,12 +117,16 @@ def getMessage():
   ])
 
 def main():
-  dotenv.load_dotenv()
+  try:
+    dotenv.load_dotenv()
 
-  dataJson = {
-    'content': getMessage()
-  }
-  r = requests.post(getWebhookUrl(), data = dataJson)
+    dataJson = {
+      'content': getMessage()
+    }
+    requests.post(getWebhookUrl(), data = dataJson)
+  except Exception as e:
+    print(e)
+    sys.exit(1)
 
 if __name__ == '__main__': main()
 else:
