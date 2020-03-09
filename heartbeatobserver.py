@@ -88,7 +88,7 @@ class HeartBeatObserver:
   def run(_):
     _.checkTargetHealths()
 
-    def isPinging(): return any([[not s.OK for s in h.STATUSES] for h in _.HEALTHS]) # tricky
+    def isPinging(): return any([not h.isGood() for h in _.HEALTHS])
     def note(health): return f' (interval between each attempt was {_.ATTEMPT_INTERVAL} second(s))' if len(health.STATUSES) > 1 else ''
 
     content = '\n'.join([
@@ -119,7 +119,7 @@ class HeartBeatObserver:
 
     def appendResult(_, statusCode): _.STATUSES.append(_.Status(statusCode))
     def appendError(_, error): _.STATUSES.append(_.Status(message = error))
-    def isGood(_): any([status.OK for status in _.STATUSES])
+    def isGood(_): return any([status.OK for status in _.STATUSES])
 
     class Status:
       def __init__(_, statusCode = 0, message = ''):
