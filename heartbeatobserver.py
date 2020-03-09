@@ -22,12 +22,9 @@ def memoize(f: Callable) -> Callable:
   return func
 
 def parseInt(value: str) -> int:
-  if value == '':
-    return 0
-  if re.search(r'^-?\d+$', value):
-    return int(value)
-  if re.search(r'^\+', value):
-    raise Exception('Remove the plus mark at the head')
+  if value == '': return 0
+  if re.search(r'^-?\d+$', value): return int(value)
+  if re.search(r'^\+', value): raise Exception('Remove the plus mark at the head')
   raise Exception('The given value is not an integral string')
 
 def getWebhookUrl():
@@ -37,17 +34,14 @@ def getWebhookUrl():
     sys.exit(1)
   return webhookUrl
 
-def getObservationTargets():
-  observationTargets = [target for target in os.getenv('OBSERVATION_TARGETS', default = '').split(',') if len(target) > 0]
-  return observationTargets
+def getObservationTargets(): return [target for target in os.getenv('OBSERVATION_TARGETS', default = '').split(',') if len(target) > 0]
 
 @memoize
 def getRetryInterval():
   try:
     retryInterval = parseInt(os.getenv('ATTEMPT_INTERVAL', default = '1'))
     return retryInterval if retryInterval > 0 else 1
-  except Exception as e:
-    raise Exception('ATTEMPT_INTERVAL: ' + e);
+  except Exception as e: raise Exception('ATTEMPT_INTERVAL: ' + e)
 
 def checkAvailabilitiesOfTargets():
   targets = getObservationTargets()
@@ -61,22 +55,17 @@ def checkAvailabilitiesOfTargets():
       try:
         statuses.append(str(requests.get(target).status_code))
         break
-      except requests.exceptions.ConnectionError:
-        statuses.append('Failed to connect')
-      except requests.exceptions.Timeout:
-        statuses.append('Timeout')
-      except requests.exception.TooManyRedirects:
-        statuses.append('Too many redirects occurred')
-      except:
-        statuses.append('Unknown error')
+      except requests.exceptions.ConnectionError: statuses.append('Failed to connect')
+      except requests.exceptions.Timeout: statuses.append('Timeout')
+      except requests.exception.TooManyRedirects: statuses.append('Too many redirects occurred')
+      except: statuses.append('Unknown error')
       time.sleep(retryInterval)
     result.append({'target': target, 'statuses': statuses})
   return result
 
 def getPingedUsers():
   userIds = [userId for userId in os.getenv('USER_IDS_FOR_PINGING', default = '').split(',') if len(userId) > 0]
-  if len(userIds) == 0:
-    return ''
+  if len(userIds) == 0: return ''
   userIdentifiers = ['<@' + userId + '>' for userId in userIds]
   return ' '.join(userIdentifiers) + ' '
 
@@ -84,8 +73,7 @@ def isOkayStatus(statusCode: str) -> bool:
   try:
     s = parseInt(statusCode)
     return s >= 200 and s < 400
-  except:
-    return False
+  except: return False
 
 def getMemoryUsage(data):
   def withUnit(n):
@@ -107,8 +95,7 @@ def getMemoryUsage(data):
     try:
       allowedKeys.index(k)
       return True
-    except ValueError:
-      return False
+    except ValueError: return False
   return ', '.join(['`' + k + ': ' + withUnit(v) + '`' for k, v in data._asdict().items() if isKeyAllowed(k)])
 
 def getMessage():
@@ -140,7 +127,7 @@ def main():
   }
   r = requests.post(getWebhookUrl(), data = dataJson)
 
-if __name__ == '__main__':
-  main()
+if __name__ == '__main__': main()
 else:
   print('Do not run me as a module')
+  sys.exit(1)
