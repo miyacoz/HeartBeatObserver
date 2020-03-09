@@ -13,120 +13,126 @@ import dotenv
 import psutil
 import requests
 
-def memoize(f: Callable) -> Callable:
-  table = {}
-  def func(*args):
-    if not args in table: table[args] = f(*args)
-    return table[args]
-  return func
-
 def parseInt(value: str) -> int:
   if value == '': return 0
   if re.search(r'^-?\d+$', value): return int(value)
-  if re.search(r'^\+', value): raise Exception('Remove the plus mark at the head')
-  raise Exception('The given value is not an integral string')
+  if re.search(r'^\+', value): raise Exception('Remove the plus mark at the head of the value: ' + value)
+  raise Exception('The given value is not an integral string: ' + value)
 
-def getWebhookUrl():
-  webhookUrl = os.getenv('WEBHOOK_URL', default = '')
-  if webhookUrl == '': raise Exception('WEBHOOK_URL is not set')
-  return webhookUrl
+class HeartBeatObserver:
+  ALLOWED_MEMORY_USAGE_KEYS = ['total', 'available', 'percent', 'free']
+  HEALTHS = []
 
-def getObservationTargets(): return [target for target in os.getenv('OBSERVATION_TARGETS', default = '').split(',') if len(target) > 0]
-
-@memoize
-def getRetryInterval():
-  try:
-    retryInterval = parseInt(os.getenv('ATTEMPT_INTERVAL', default = '1'))
-    return retryInterval if retryInterval > 0 else 1
-  except Exception as e: raise Exception('ATTEMPT_INTERVAL: ' + e)
-
-def checkAvailabilitiesOfTargets():
-  targets = getObservationTargets()
-  numberOfAttempts = parseInt(os.getenv('NUMBER_OF_ATTEMPTS', default = '0'))
-  tries = numberOfAttempts if numberOfAttempts > 0 else 1
-  retryInterval = getRetryInterval()
-  result = []
-  for target in targets:
-    statuses = []
-    for _ in range(tries):
-      try:
-        statuses.append(str(requests.get(target).status_code))
-        break
-      except requests.exceptions.ConnectionError: statuses.append('Failed to connect')
-      except requests.exceptions.Timeout: statuses.append('Timeout')
-      except requests.exception.TooManyRedirects: statuses.append('Too many redirects occurred')
-      except: statuses.append('Unknown error')
-      time.sleep(retryInterval)
-    result.append({'target': target, 'statuses': statuses})
-  return result
-
-def getPingedUsers():
-  userIds = [userId for userId in os.getenv('USER_IDS_FOR_PINGING', default = '').split(',') if len(userId) > 0]
-  if len(userIds) == 0: return ''
-  userIdentifiers = ['<@' + userId + '>' for userId in userIds]
-  return ' '.join(userIdentifiers) + ' '
-
-def isOkayStatus(statusCode: str) -> bool:
-  try:
-    s = parseInt(statusCode)
-    return s >= 200 and s < 400
-  except: return False
-
-def getMemoryUsage(data):
-  def withUnit(n):
-    if n > 1024 ** 3:
-      g = n // (1024 ** 3)
-      m = math.floor((n - (g * (1024 ** 3))) // (1024 ** 2) / 10)
-      return str(g) + '.' + str(m) + ' G'
-    if n > 1024 ** 2:
-      m = n // (1024 ** 2)
-      k = math.floor((n - (m * (1024 ** 2))) // (1024 ** 1) / 10)
-      return str(m) + '.' + str(k) + ' M'
-    if n > 1024 ** 1:
-      m = n // (1024 ** 1)
-      d = math.floor((n - (k * (1024 ** 1))) // (1024 ** 0) / 10)
-      return str(k) + '.' + str(d) + ' K'
-    return str(n)
-  def isKeyAllowed(k):
-    allowedKeys = ['total', 'available', 'percent', 'free']
-    try:
-      allowedKeys.index(k)
-      return True
-    except ValueError: return False
-  return ', '.join(['`' + k + ': ' + withUnit(v) + '`' for k, v in data._asdict().items() if isKeyAllowed(k)])
-
-def getMessage():
-  # make this more testable
-  users = getPingedUsers()
-  loadAverages = [str(math.floor(la * 100) / 100) for la in os.getloadavg()]
-  result = checkAvailabilitiesOfTargets()
-  return '\n'.join([
-    (users if len([record['statuses'] for record in result if not any([isOkayStatus(status) for status in record['statuses']])]) > 0 else ''),
-    '> ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-    'Current loads: ' + ', '.join(['`' + la + '`' for la in loadAverages]),
-    'Virtual memory usage: ' + getMemoryUsage(psutil.virtual_memory()),
-    'Swap memory usage: ' + getMemoryUsage(psutil.swap_memory()),
-    ('Availability checks:' if len(result) > 0 else ''),
-    '\n'.join([
-      record['target'] + ' ' + (
-	', '.join(record['statuses'])
-        if any([isOkayStatus(status) for status in record['statuses']])
-        else '__' + ', '.join(record['statuses']) + '__' + (' (interval between each attempt was ' + str(getRetryInterval()) + ' second(s))' if len(record['statuses']) > 1 else '')
-      ) for record in result
-    ]),
-  ])
-
-def main():
-  try:
+  def __init__(_):
+    _.getLoadAverages()
+    _.getMemoryUsage()
     dotenv.load_dotenv()
+    _.getWebhookUrl()
+    _.getObservationTargets()
+    _.getUserIdsForPinging()
+    _.getNumberOfAttempts()
+    _.getAttemptInterval()
+
+  def _getListFromEnv(noUse, key): return [t for t in os.getenv(key, default = '').split(',') if len(t) > 0]
+
+  def _getIntegerFromEnv(noUse, key):
+    v = parseInt(os.getenv(key, default = '0'))
+    return v if v > 0 else 1
+
+  def getWebhookUrl(_):
+    url = os.getenv('WEBHOOK_URL', default = '')
+    if url == '': raise Exception('WEBHOOK_URL is not set')
+    _.WEBHOOK_URL = url
+
+  def getMemoryUsage(_):
+    def filterResult(data):
+      def isKeyAllowed(k): return k in _.ALLOWED_MEMORY_USAGE_KEYS
+      return [(k, v) for k, v in data._asdict().items() if isKeyAllowed(k)]
+    _.VIRTUAL_MEMORY = filterResult(psutil.virtual_memory())
+    _.SWAP_MEMORY = filterResult(psutil.swap_memory())
+
+  def getLoadAverages(_): _.LOAD_AVERAGES = [(math.floor(la * 100) / 100) for la in os.getloadavg()]
+  def getObservationTargets(_): _.OBSERVATION_TARGETS = _._getListFromEnv('OBSERVATION_TARGETS')
+  def getUserIdsForPinging(_): _.USER_IDS_FOR_PINGING = _._getListFromEnv('USER_IDS_FOR_PINGING')
+  def getNumberOfAttempts(_): _.NUMBER_OF_ATTEMPTS = _._getIntegerFromEnv('NUMBER_OF_ATTEMPTS')
+  def getAttemptInterval(_): _.ATTEMPT_INTERVAL = _._getIntegerFromEnv('ATTEMPT_INTERVAL')
+
+  def checkTargetHealths(_):
+    for target in _.OBSERVATION_TARGETS:
+      health = _.HealthCheck(target)
+      for noUse in range(_.NUMBER_OF_ATTEMPTS):
+        try:
+          health.appendResult(requests.get(target).status_code)
+          break
+        except requests.ConnectionError: health.appendError('Failed to connect')
+        except requests.Timeout: health.appendError('Timeout')
+        except requests.TooManyRedirects: health.appendError('Too many redirects occurred')
+        except requests.HTTPError: health.appendError('HTTP error occurred')
+        except: health.appendError('Unknown error')
+        time.sleep(_.ATTEMPT_INTERVAL)
+      _.HEALTHS.append(health)
+
+  def formatMemoryUsage(noUse, value):
+    def withUnit(n, p):
+      unit = 'G' if p == 3 else 'M' if p == 2 else 'K'
+      if n > 1024 ** p:
+        beforeDecimal = n // (1024 ** p)
+        afterDecimal = math.floor((n - (beforeDecimal * (1024 ** p))) // (1024 * (p - 1)) / 10)
+        return f'{beforeDecimal}.{afterDecimal} {unit}' if p > 0 else f'{beforeDecimal}'
+      else: return withUnit(n, p - 1)
+    return ', '.join([f'`{k}: {withUnit(v, 3)}`' for k, v in value])
+
+  def formatPingedUsers(_, userIds): return ' '.join([f'<@{v}>' for v in userIds])
+  def formatLoadAverages(_): return ', '.join([f'`{v}`' for v in _.LOAD_AVERAGES])
+
+  def run(_):
+    _.checkTargetHealths()
+
+    def isPinging(): return any([[not s.OK for s in h.STATUSES] for h in _.HEALTHS]) # tricky
+    def note(health): return f' (interval between each attempt was {_.ATTEMPT_INTERVAL} second(s))' if len(health.STATUSES) > 1 else ''
+
+    content = '\n'.join([
+      (_.formatPingedUsers(_.USER_IDS_FOR_PINGING) if isPinging() else ''),
+      '> ' + datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+      'Current loads: ' + _.formatLoadAverages(),
+      'Virtual memory usage: ' + _.formatMemoryUsage(_.VIRTUAL_MEMORY),
+      'Swap memory usage: ' + _.formatMemoryUsage(_.SWAP_MEMORY),
+      ('Availability checks:' if len(_.HEALTHS) > 0 else ''),
+      '\n'.join([
+        health.TARGET + ' ' + (
+          ', '.join([str(s.CODE) for s in health.STATUSES])
+          if health.isGood()
+          else '__' + ', '.join([s.getMessage() for s in health.STATUSES]) + '__' + note(health)
+        ) for health in _.HEALTHS
+      ]),
+    ])
 
     dataJson = {
-      'content': getMessage()
+      'content': content
     }
-    requests.post(getWebhookUrl(), data = dataJson)
-  except Exception as e:
-    print(e)
-    sys.exit(1)
+    requests.post(_.WEBHOOK_URL, data = dataJson)
+
+  class HealthCheck:
+    def __init__(_, target = '', statuses = []):
+      _.TARGET = target
+      _.STATUSES = [] + statuses # to allocate new memory address
+
+    def appendResult(_, statusCode): _.STATUSES.append(_.Status(statusCode))
+    def appendError(_, error): _.STATUSES.append(_.Status(message = error))
+    def isGood(_): any([status.OK for status in _.STATUSES])
+
+    class Status:
+      def __init__(_, statusCode = 0, message = ''):
+        _.CODE = statusCode
+        _.OK = statusCode >= 200 and statusCode < 400
+        _.addMessage(message)
+
+      def addMessage(_, message): _.MESSAGE = message
+      def getMessage(_): return _.MESSAGE if _.CODE == 0 else str(_.CODE)
+
+def main():
+  h = HeartBeatObserver()
+  h.run()
 
 if __name__ == '__main__': main()
 else:
