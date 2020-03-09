@@ -4,11 +4,31 @@
 from datetime import datetime
 import math
 import os
+import re
 import sys
+import time
+from typing import Callable
 
 import dotenv
 import psutil
 import requests
+
+def memoize(f: Callable) -> Callable:
+  table = {}
+  def func(*args):
+    if not args in table:
+      table[args] = f(*args)
+    return table[args]
+  return func
+
+def parseInt(value: str) -> int:
+  if value == "":
+    return 0
+  if re.search(r"^-?\d+$", value):
+    return int(value)
+  if re.search(r"^\+", value):
+    raise Exception("Remove the plus mark at the head")
+  raise Exception("The given value is not an integral string")
 
 def getWebhookUrl():
   webhookUrl = os.getenv("WEBHOOK_URL", default = "")
@@ -21,20 +41,36 @@ def getObservationTargets():
   observationTargets = [target for target in os.getenv("OBSERVATION_TARGETS", default = "").split(",") if len(target) > 0]
   return observationTargets
 
+@memoize
+def getRetryInterval():
+  try:
+    retryInterval = parseInt(os.getenv("ATTEMPT_INTERVAL", default = "1"))
+    return retryInterval if retryInterval > 0 else 1
+  except Exception as e:
+    raise Exception("ATTEMPT_INTERVAL: " + e);
+
 def checkAvailabilitiesOfTargets():
   targets = getObservationTargets()
+  numberOfAttempts = parseInt(os.getenv("NUMBER_OF_ATTEMPTS", default = "0"))
+  tries = numberOfAttempts if numberOfAttempts > 0 else 1
+  retryInterval = getRetryInterval()
   result = []
   for target in targets:
-    status = 0
-    try:
-      status = requests.get(target).status_code
-    except requests.exceptions.ConnectionError:
-      status = "Failed to connect"
-    except requests.exceptions.Timeout:
-      status = "Timeout"
-    except requests.exception.TooManyRedirects:
-      status = "Too many redirects occurred"
-    result.append((target, status))
+    statuses = []
+    for _ in range(tries):
+      try:
+        statuses.append(str(requests.get(target).status_code))
+        break
+      except requests.exceptions.ConnectionError:
+        statuses.append("Failed to connect")
+      except requests.exceptions.Timeout:
+        statuses.append("Timeout")
+      except requests.exception.TooManyRedirects:
+        statuses.append("Too many redirects occurred")
+      except:
+        statuses.append("Unknown error")
+      time.sleep(retryInterval)
+    result.append({"target": target, "statuses": statuses})
   return result
 
 def getPingedUsers():
@@ -44,9 +80,10 @@ def getPingedUsers():
   userIdentifiers = ["<@" + userId + ">" for userId in userIds]
   return " ".join(userIdentifiers) + " "
 
-def isOkayStatus(statusCode):
+def isOkayStatus(statusCode: str) -> str:
   try:
-    return statusCode >= 200 and statusCode < 400
+    s = parseInt(statusCode)
+    return s >= 200 and s < 400
   except:
     return False
 
@@ -80,13 +117,19 @@ def getMessage():
   loadAverages = [str(math.floor(la * 100) / 100) for la in os.getloadavg()]
   result = checkAvailabilitiesOfTargets()
   return "\n".join([
-    (users if len([record[1] for record in result if not isOkayStatus(record[1])]) > 0 else ""),
+    (users if len([record["statuses"] for record in result if not any([isOkayStatus(status) for status in record["statuses"]])]) > 0 else ""),
     "> " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "Current loads: " + ", ".join(["`" + la + "`" for la in loadAverages]),
     "Virtual memory usage: " + getMemoryUsage(psutil.virtual_memory()),
     "Swap memory usage: " + getMemoryUsage(psutil.swap_memory()),
     ("Availability checks:" if len(result) > 0 else ""),
-    "\n".join([record[0] + " " + (str(record[1]) if isOkayStatus(record[1]) else "__" + str(record[1]) + "__") for record in result]),
+    "\n".join([
+      record["target"] + " " + (
+	", ".join(record["statuses"])
+        if any([isOkayStatus(status) for status in record["statuses"]])
+        else "__" + ", ".join(record["statuses"]) + "__" + (" (interval between each attempt was " + str(getRetryInterval()) + " second(s))" if len(record["statuses"]) > 1 else "")
+      ) for record in result
+    ]),
   ])
 
 def main():
