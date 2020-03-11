@@ -12,6 +12,7 @@ from typing import Callable
 import dotenv
 import psutil
 import requests
+import yaml
 
 
 def parseInt(value: str) -> int:
@@ -33,12 +34,7 @@ class HeartBeatObserver:
     def __init__(_):
         _.getLoadAverages()
         _.getMemoryUsage()
-        dotenv.load_dotenv()
-        _.getWebhookUrl()
-        _.getObservationTargets()
-        _.getUserIdsForPinging()
-        _.getNumberOfAttempts()
-        _.getAttemptInterval()
+        _.getConfig()
 
     def _getListFromEnv(noUse, key):
         return [t for t in os.getenv(key, default="").split(",") if len(t) > 0]
@@ -47,11 +43,37 @@ class HeartBeatObserver:
         v = parseInt(os.getenv(key, default="0"))
         return v if v > 0 else 1
 
-    def getWebhookUrl(_):
-        url = os.getenv("WEBHOOK_URL", default="")
-        if url == "":
+    def getConfig(_):
+        # get from env or dotenv
+        dotenv.load_dotenv()
+        _.WEBHOOK_URL = os.getenv("WEBHOOK_URL", default="")
+        _.OBSERVATION_TARGETS = _._getListFromEnv("OBSERVATION_TARGETS")
+        _.USER_IDS_FOR_PINGING = _._getListFromEnv("USER_IDS_FOR_PINGING")
+        _.NUMBER_OF_ATTEMPTS = _._getIntegerFromEnv("NUMBER_OF_ATTEMPTS")
+        _.ATTEMPT_INTERVAL = _._getIntegerFromEnv("ATTEMPT_INTERVAL")
+
+        try:
+            # overwrite them with data from yaml
+            s = open("config.yaml", "r")
+            c = yaml.safe_load(s)
+
+            names = [
+                "webhook_url",
+                "observation_targets",
+                "user_ids_for_pinging",
+                "number_of_attempts",
+                "attempt_interval",
+            ]
+            for n in names:
+                try:
+                    setattr(_, n.upper(), c[n])
+                except KeyError:
+                    pass
+        except FileNotFoundError:
+            pass
+
+        if _.WEBHOOK_URL == "":
             raise Exception("WEBHOOK_URL is not set")
-        _.WEBHOOK_URL = url
 
     def getMemoryUsage(_):
         def filterResult(data):
@@ -69,18 +91,6 @@ class HeartBeatObserver:
         _.LOAD_AVERAGES = [
             (math.floor(la * 100) / 100) for la in os.getloadavg()
         ]
-
-    def getObservationTargets(_):
-        _.OBSERVATION_TARGETS = _._getListFromEnv("OBSERVATION_TARGETS")
-
-    def getUserIdsForPinging(_):
-        _.USER_IDS_FOR_PINGING = _._getListFromEnv("USER_IDS_FOR_PINGING")
-
-    def getNumberOfAttempts(_):
-        _.NUMBER_OF_ATTEMPTS = _._getIntegerFromEnv("NUMBER_OF_ATTEMPTS")
-
-    def getAttemptInterval(_):
-        _.ATTEMPT_INTERVAL = _._getIntegerFromEnv("ATTEMPT_INTERVAL")
 
     def checkTargetHealths(_):
         for target in _.OBSERVATION_TARGETS:

@@ -1,0 +1,7 @@
+webhook_url: 'https://discordapp.com/api/webhooks/{webhook.id}/{webhook.token}'
+observation_targets:
+  - 'https://www.google.com/'
+user_ids_for_pinging:
+  - 12345
+number_of_attempts: 5
+attempt_interval: 5
