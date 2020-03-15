@@ -32,6 +32,7 @@ class HeartBeatObserver:
     HEALTHS = []
 
     def __init__(_):
+        _.APP_ROOT = os.path.dirname(os.path.realpath(__file__))
         _.getLoadAverages()
         _.getMemoryUsage()
         _.getConfig()
@@ -54,7 +55,7 @@ class HeartBeatObserver:
 
         try:
             # overwrite them with data from yaml
-            s = open("config.yaml", "r")
+            s = open(f"{_.APP_ROOT}config.yaml", "r")
             c = yaml.safe_load(s)
 
             names = [
