@@ -55,7 +55,7 @@ class HeartBeatObserver:
 
         try:
             # overwrite them with data from yaml
-            s = open(f"{_.APP_ROOT}config.yaml", "r")
+            s = open(f"{_.APP_ROOT}/config.yaml", "r")
             c = yaml.safe_load(s)
 
             names = [
