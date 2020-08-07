@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime
-import math
 import os
 import re
 import sys
@@ -10,7 +9,6 @@ import time
 from typing import Callable
 
 import dotenv
-import psutil
 import requests
 import yaml
 
@@ -28,13 +26,10 @@ def parseInt(value: str) -> int:
 
 
 class HeartBeatObserver:
-    ALLOWED_MEMORY_USAGE_KEYS = ["total", "available", "percent", "free"]
     HEALTHS = []
 
     def __init__(_):
         _.APP_ROOT = os.path.dirname(os.path.realpath(__file__))
-        _.getLoadAverages()
-        _.getMemoryUsage()
         _.getConfig()
 
     def _getListFromEnv(noUse, key):
@@ -76,23 +71,6 @@ class HeartBeatObserver:
         if _.WEBHOOK_URL == "":
             raise Exception("WEBHOOK_URL is not set")
 
-    def getMemoryUsage(_):
-        def filterResult(data):
-            def isKeyAllowed(k):
-                return k in _.ALLOWED_MEMORY_USAGE_KEYS
-
-            return [
-                (k, v) for k, v in data._asdict().items() if isKeyAllowed(k)
-            ]
-
-        _.VIRTUAL_MEMORY = filterResult(psutil.virtual_memory())
-        _.SWAP_MEMORY = filterResult(psutil.swap_memory())
-
-    def getLoadAverages(_):
-        _.LOAD_AVERAGES = [
-            (math.floor(la * 100) / 100) for la in os.getloadavg()
-        ]
-
     def checkTargetHealths(_):
         for target in _.OBSERVATION_TARGETS:
             health = _.HealthCheck(target)
@@ -113,29 +91,8 @@ class HeartBeatObserver:
                 time.sleep(_.ATTEMPT_INTERVAL)
             _.HEALTHS.append(health)
 
-    def formatMemoryUsage(noUse, value):
-        def withUnit(n, p):
-            unit = "G" if p == 3 else "M" if p == 2 else "K"
-            if n > 1024 ** p:
-                beforeDecimal = n // (1024 ** p)
-                afterDecimal = math.floor(
-                    (n - (beforeDecimal * (1024 ** p))) // (1024 * (p - 1)) / 10
-                )
-                return (
-                    f"{beforeDecimal}.{afterDecimal} {unit}"
-                    if p > 0
-                    else f"{beforeDecimal}"
-                )
-            else:
-                return withUnit(n, p - 1)
-
-        return ", ".join([f"`{k}: {withUnit(v, 3)}`" for k, v in value])
-
     def formatPingedUsers(_, userIds):
         return " ".join([f"<@{v}>" for v in userIds])
-
-    def formatLoadAverages(_):
-        return ", ".join([f"`{v}`" for v in _.LOAD_AVERAGES])
 
     def run(_):
         _.checkTargetHealths()
@@ -158,11 +115,6 @@ class HeartBeatObserver:
                     else ""
                 ),
                 "> " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Current loads: " + _.formatLoadAverages(),
-                "Virtual memory usage: "
-                + _.formatMemoryUsage(_.VIRTUAL_MEMORY),
-                "Swap memory usage: " + _.formatMemoryUsage(_.SWAP_MEMORY),
-                ("Availability checks:" if len(_.HEALTHS) > 0 else ""),
                 "\n".join(
                     [
                         health.TARGET
