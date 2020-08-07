@@ -111,7 +111,7 @@ class HeartBeatObserver:
 
         def note(health):
             return (
-                f" (interval between each attempt was {_.ATTEMPT_INTERVAL} second(s))"
+                f" (interval between each attempt was {_.ATTEMPT_INTERVAL} {'second' if _.ATTEMPT_INTERVAL == 1 else 'seconds'})"
                 if len(health.STATUSES) > 1
                 else ""
             )
