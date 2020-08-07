@@ -78,21 +78,27 @@ class HeartBeatObserver:
         for target in _.OBSERVATION_TARGETS:
             health = _.HealthCheck(target)
             for noUse in range(_.NUMBER_OF_ATTEMPTS):
-                try:
-                    health.appendResult(requests.get(target).status_code)
+                _.checkTargetHealth(health)
+
+                if health.RETRY:
+                    time.sleep(_.ATTEMPT_INTERVAL)
+                else:
                     break
-                except requests.ConnectionError:
-                    health.appendError("Failed to connect")
-                except requests.Timeout:
-                    health.appendError("Timeout")
-                except requests.TooManyRedirects:
-                    health.appendError("Too many redirects occurred")
-                except requests.HTTPError:
-                    health.appendError("HTTP error occurred")
-                except:
-                    health.appendError("Unknown error")
-                time.sleep(_.ATTEMPT_INTERVAL)
             _.HEALTHS.append(health)
+
+    def checkTargetHealth(_, health):
+        try:
+            health.appendResult(requests.get(health.TARGET))
+        except requests.ConnectionError:
+            health.appendError("Failed to connect")
+        except requests.Timeout:
+            health.appendError("Timeout", retry=True)
+        except requests.TooManyRedirects:
+            health.appendError("Too many redirects occurred")
+        except requests.HTTPError:
+            health.appendError("HTTP error occurred")
+        except:
+            health.appendError("Unknown error")
 
     def formatPingedUsers(_, userIds):
         return " ".join([f"<@{v}>" for v in userIds])
@@ -145,12 +151,16 @@ class HeartBeatObserver:
         def __init__(_, target="", statuses=[]):
             _.TARGET = target
             _.STATUSES = [] + statuses  # to allocate new memory address
+            _.RETRY = True
 
-        def appendResult(_, statusCode):
-            _.STATUSES.append(_.Status(statusCode))
+        def appendResult(_, result):
+            _.RESULT = result
+            _.STATUSES.append(_.Status(result.status_code))
+            _.RETRY = not _.isGood()
 
-        def appendError(_, error):
+        def appendError(_, error, retry=False):
             _.STATUSES.append(_.Status(message=error))
+            _.RETRY = retry
 
         def isGood(_):
             return any([status.OK for status in _.STATUSES])
