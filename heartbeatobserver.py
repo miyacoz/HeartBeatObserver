@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# to format the code, run `black -tpy38 -l80 heartbeatobserver.py`.
 
 from datetime import datetime
 import os
