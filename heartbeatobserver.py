@@ -7,11 +7,15 @@
 from datetime import datetime
 import os
 import re
+import socket
+import ssl
 import sys
 import time
+from datetime import timedelta
 from typing import Callable
 
 import dotenv
+import OpenSSL
 import requests
 import yaml
 
@@ -50,6 +54,7 @@ class HeartBeatObserver:
         _.USER_IDS_FOR_PINGING = _._getListFromEnv("USER_IDS_FOR_PINGING")
         _.NUMBER_OF_ATTEMPTS = _._getIntegerFromEnv("NUMBER_OF_ATTEMPTS")
         _.ATTEMPT_INTERVAL = _._getIntegerFromEnv("ATTEMPT_INTERVAL")
+        _.ALERT_SSL_EXPIRES_IN = _._getIntegerFromEnv("ALERT_SSL_EXPIRES_IN")
 
         try:
             # overwrite them with data from yaml
@@ -62,6 +67,7 @@ class HeartBeatObserver:
                 "user_ids_for_pinging",
                 "number_of_attempts",
                 "attempt_interval",
+                "alert_ssl_expires_in",
             ]
             for n in names:
                 try:
@@ -83,6 +89,8 @@ class HeartBeatObserver:
                 if health.RETRY:
                     time.sleep(_.ATTEMPT_INTERVAL)
                 else:
+                    if health.IS_SSL:
+                        health.checkCertificate()
                     break
             _.HEALTHS.append(health)
 
@@ -107,7 +115,7 @@ class HeartBeatObserver:
         _.checkTargetHealths()
 
         def isPinging():
-            return any([not h.isGood() for h in _.HEALTHS])
+            return any([h.shouldAlert(_.ALERT_SSL_EXPIRES_IN) for h in _.HEALTHS])
 
         def note(health):
             return (
@@ -130,6 +138,7 @@ class HeartBeatObserver:
                         + " "
                         + (
                             ", ".join([str(s.CODE) for s in health.STATUSES])
+                            + (f' (Expires: {health.getNotAfter()})')
                             if health.isGood()
                             else "__"
                             + ", ".join(
@@ -148,15 +157,20 @@ class HeartBeatObserver:
         requests.post(_.WEBHOOK_URL, data=dataJson)
 
     class HealthCheck:
+        RETRY = True
+        RESULT = None
+        IS_SSL = False
+        NOT_AFTER = None
+
         def __init__(_, target="", statuses=[]):
             _.TARGET = target
             _.STATUSES = [] + statuses  # to allocate new memory address
-            _.RETRY = True
 
         def appendResult(_, result):
             _.RESULT = result
             _.STATUSES.append(_.Status(result.status_code))
             _.RETRY = not _.isGood()
+            _.IS_SSL = True if re.match(r'https:', result.url) is not None else False
 
         def appendError(_, error, retry=False):
             _.STATUSES.append(_.Status(message=error))
@@ -164,6 +178,30 @@ class HeartBeatObserver:
 
         def isGood(_):
             return any([status.OK for status in _.STATUSES])
+
+        def checkCertificate(_):
+            domain = re.match(r'https:\/\/(.*)\/', _.TARGET).group(1)
+            query = (domain, 443)
+
+            try:
+                # SNI traceable here
+                connection = ssl.create_connection(query)
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                sock = context.wrap_socket(connection, server_hostname=domain)
+                certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+            except:
+                e = sys.exc_info()[0]
+                certificate = ssl.get_server_certificate(query)
+            x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, certificate)
+            _.NOT_AFTER = datetime.strptime(x509.get_notAfter().decode(), '%Y%m%d%H%M%SZ')
+
+        def getNotAfter(_):
+            return _.NOT_AFTER.strftime('%Y-%m-%d') if _.IS_SSL else ''
+
+        def shouldAlert(_, ssl_expires_in):
+            now = datetime.now()
+            delta = timedelta(days=ssl_expires_in + 1, seconds=1)
+            return not _.isGood() or now + delta > _.NOT_AFTER
 
         class Status:
             def __init__(_, statusCode=0, message=""):

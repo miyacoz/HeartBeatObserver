@@ -5,3 +5,4 @@ user_ids_for_pinging:
   - 12345
 number_of_attempts: 5
 attempt_interval: 5
+alert_ssl_expires_in: 30
