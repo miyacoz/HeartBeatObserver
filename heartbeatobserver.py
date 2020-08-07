@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # to format the code, run `black -tpy38 -l80 heartbeatobserver.py`.
+# to update requirements list, run `pip freeze > requirements.txt`.
+# to install requirements, run `pip install -r requirements.txt`.
 
 from datetime import datetime
 import os
