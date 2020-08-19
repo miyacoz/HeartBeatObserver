@@ -124,6 +124,27 @@ class HeartBeatObserver:
                 else ""
             )
 
+        def showHealthyStatus(health):
+            return (
+                ", ".join([str(s.CODE) for s in health.STATUSES])
+                + (f" (Expires: {health.getNotAfter()})")
+                + (
+                    (
+                        f" *SSL Certificate expires in {health.getRemainingDays()} days!*"
+                    )
+                    if health.shouldAlert(_.ALERT_SSL_EXPIRES_IN)
+                    else ""
+                )
+            )
+
+        def showUnhealthyStatus(health):
+            return (
+                "__"
+                + ", ".join([s.getMessage() for s in health.STATUSES])
+                + "__"
+                + note(health)
+            )
+
         content = "\n".join(
             [
                 (
@@ -137,15 +158,9 @@ class HeartBeatObserver:
                         health.TARGET
                         + " "
                         + (
-                            ", ".join([str(s.CODE) for s in health.STATUSES])
-                            + (f' (Expires: {health.getNotAfter()})')
+                            showHealthyStatus(health)
                             if health.isGood()
-                            else "__"
-                            + ", ".join(
-                                [s.getMessage() for s in health.STATUSES]
-                            )
-                            + "__"
-                            + note(health)
+                            else showUnhealthyStatus(health)
                         )
                         for health in _.HEALTHS
                     ]
@@ -202,6 +217,11 @@ class HeartBeatObserver:
             now = datetime.now()
             delta = timedelta(days=ssl_expires_in + 1, seconds=1)
             return not _.isGood() or now + delta > _.NOT_AFTER
+
+        def getRemainingDays(_):
+            now = datetime.now()
+            delta = _.NOT_AFTER - datetime.now()
+            return delta.days
 
         class Status:
             def __init__(_, statusCode=0, message=""):
