@@ -115,7 +115,9 @@ class HeartBeatObserver:
         _.checkTargetHealths()
 
         def isPinging():
-            return any([h.shouldAlert(_.ALERT_SSL_EXPIRES_IN) for h in _.HEALTHS])
+            return any(
+                [h.shouldAlert(_.ALERT_SSL_EXPIRES_IN) for h in _.HEALTHS]
+            )
 
         def note(health):
             return (
@@ -185,7 +187,9 @@ class HeartBeatObserver:
             _.RESULT = result
             _.STATUSES.append(_.Status(result.status_code))
             _.RETRY = not _.isGood()
-            _.IS_SSL = True if re.match(r'https:', result.url) is not None else False
+            _.IS_SSL = (
+                True if re.match(r"https:", result.url) is not None else False
+            )
 
         def appendError(_, error, retry=False):
             _.STATUSES.append(_.Status(message=error))
@@ -195,7 +199,7 @@ class HeartBeatObserver:
             return any([status.OK for status in _.STATUSES])
 
         def checkCertificate(_):
-            domain = re.match(r'https:\/\/(.*)\/', _.TARGET).group(1)
+            domain = re.match(r"https:\/\/(.*)\/", _.TARGET).group(1)
             query = (domain, 443)
 
             try:
@@ -207,11 +211,15 @@ class HeartBeatObserver:
             except:
                 e = sys.exc_info()[0]
                 certificate = ssl.get_server_certificate(query)
-            x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, certificate)
-            _.NOT_AFTER = datetime.strptime(x509.get_notAfter().decode(), '%Y%m%d%H%M%SZ')
+            x509 = OpenSSL.crypto.load_certificate(
+                OpenSSL.crypto.FILETYPE_PEM, certificate
+            )
+            _.NOT_AFTER = datetime.strptime(
+                x509.get_notAfter().decode(), "%Y%m%d%H%M%SZ"
+            )
 
         def getNotAfter(_):
-            return _.NOT_AFTER.strftime('%Y-%m-%d') if _.IS_SSL else ''
+            return _.NOT_AFTER.strftime("%Y-%m-%d") if _.IS_SSL else ""
 
         def shouldAlert(_, ssl_expires_in):
             now = datetime.now()
