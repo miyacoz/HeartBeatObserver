@@ -16,7 +16,7 @@ pyOpenSSL==19.1.0
 python-dotenv==0.10.3
 PyYAML==5.4
 regex==2020.2.20
-requests==2.22.0
+requests==2.31.0
 six==1.15.0
 toml==0.10.0
 typed-ast==1.4.1
